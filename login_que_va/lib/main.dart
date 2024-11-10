@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'TennisDataModel.dart';
 import 'TennisDetail.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(MyApp());
 }
 
@@ -78,36 +82,20 @@ class _LoginScreenState extends State<LoginScreen> {
 class Tennis extends StatefulWidget {
   const Tennis({Key? key}) : super(key: key);
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  _TennisState createState() => _TennisState();
 }
 
-class _MyHomePageState extends State<Tennis> {
-  static List<String> tennisname = [
-    'Roger Federer',
-    'Rafa Nadal',
-    'Novak Djokovic',
-    'Stan Wawrinka',
-    'Daniil Medvedev'
-  ];
-
-  static List url = [
-    'https://cdn.britannica.com/57/183257-050-0BA11B4B/Roger-Federer-2012.jpg',
-    'https://e00-elmundo.uecdn.es/assets/multimedia/imagenes/2022/06/24/16560843481540.jpg',
-    'https://fotografias.lasexta.com/clipping/cmsimages02/2024/06/04/750CEA27-93F8-42B3-B064-93C7F00CB99F/novak-djokovic_98.jpg?crop=4347,2446,x0,y222&width=1900&height=1069&optimize=low&format=webply',
-    'https://www.newlyswissed.com/wp-content/uploads/2020/11/Stanislaw-Wawrinka-Swiss-Tennis-Player-02.jpg',
-    'https://ogimg.infoglobo.com.br/esportes/25413693-b96-69f/FT1086A/97787689_Russias-Daniil-Medvedev-returns-the-ball-to-Spains-Rafael-Nadal-during-their-Mexico-ATP-O.jpg'
-  ];
-
-  static List<String> tennisgs = ['20', '22', '24', '3', '1'];
-
-  final List<TennisDataModel> tennisData = List.generate(
-    tennisname.length,
-    (index) => TennisDataModel(
-      tennisname[index],
-      url[index],
-      '${tennisname[index]} tiene ${tennisgs[index]} titulos de Grand Slam a lo largo de su carrera',
-    ),
-  );
+class _TennisState extends State<Tennis> {
+  Future<List<TennisDataModel>> fetchTennisData() async {
+    final snapshot = await FirebaseFirestore.instance.collection('info-ten').get();
+    return snapshot.docs.map((doc) {
+      return TennisDataModel(
+        doc['name'],
+        doc['photo'],
+        '${doc['name']} tiene ${doc['gs']} títulos de Grand Slam a lo largo de su carrera',
+      );
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -115,27 +103,39 @@ class _MyHomePageState extends State<Tennis> {
       appBar: AppBar(
         title: const Text('Tenistas'),
       ),
-      body: ListView.builder(
-        itemCount: tennisData.length,
-        itemBuilder: (context, index) {
-          return Card(
-            child: ListTile(
-              title: Text(tennisData[index].name),
-              leading: SizedBox(
-                width: 50,
-                height: 50,
-                child: Image.network(tennisData[index].imageUrl),
-              ),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => TennisDetail(
-                      tennisDataModel: tennisData[index],
-                    ),
+      body: FutureBuilder<List<TennisDataModel>>(
+        future: fetchTennisData(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          final tennisData = snapshot.data!;
+          return ListView.builder(
+            itemCount: tennisData.length,
+            itemBuilder: (context, index) {
+              return Card(
+                child: ListTile(
+                  title: Text(tennisData[index].name),
+                  leading: SizedBox(
+                    width: 50,
+                    height: 50,
+                    child: Image.network(tennisData[index].imageUrl),
                   ),
-                );
-              },
-            ),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => TennisDetail(
+                          tennisDataModel: tennisData[index],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
           );
         },
       ),
